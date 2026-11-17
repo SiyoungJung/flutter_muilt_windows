@@ -27,6 +27,8 @@ struct WindowContext {
 
 void free_window_context(gpointer data) {
   auto* context = static_cast<WindowContext*>(data);
+  g_printerr("[window-debug] freeing context type=%s id=%" G_GINT64_FORMAT "\n",
+             context->type.c_str(), static_cast<gint64>(context->id));
   fl_method_channel_set_method_call_handler(context->channel, nullptr, nullptr,
                                             nullptr);
   g_object_unref(context->channel);
@@ -34,7 +36,16 @@ void free_window_context(gpointer data) {
 }
 
 void first_frame_cb(FlView* view, gpointer) {
+  g_printerr("[window-debug] first frame view=%p\n", static_cast<void*>(view));
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
+}
+
+gboolean close_window_cb(GtkWidget* window, GdkEvent*, gpointer) {
+  g_printerr("[window-debug] close requested window=%p\n", static_cast<void*>(window));
+  // FlView's default delete handler requests process-wide application exit.
+  // Destroy only this GTK window; GtkApplication exits after the last one.
+  gtk_widget_destroy(window);
+  return TRUE;
 }
 
 void setup_window(MyApplication* self, FlView* view, GtkWidget* window,
@@ -43,6 +54,8 @@ void setup_window(MyApplication* self, FlView* view, GtkWidget* window,
 void on_method_call(FlMethodChannel*, FlMethodCall* call, gpointer user_data) {
   auto* context = static_cast<WindowContext*>(user_data);
   const gchar* method = fl_method_call_get_name(call);
+  g_printerr("[window-debug] method=%s window=%s:%" G_GINT64_FORMAT "\n",
+             method, context->type.c_str(), static_cast<gint64>(context->id));
   if (g_strcmp0(method, "getWindowInfo") == 0) {
     g_autoptr(FlValue) result = fl_value_new_map();
     fl_value_set_string_take(result, "type",
@@ -74,6 +87,7 @@ void on_method_call(FlMethodChannel*, FlMethodCall* call, gpointer user_data) {
       return;
     }
     std::string key = type + ":" + std::to_string(id);
+    g_printerr("[window-debug] opening key=%s\n", key.c_str());
     EngineEntry* entry = context->app->engine_manager->get(key);
     if (entry != nullptr) {
       gtk_window_present(GTK_WINDOW(entry->window));
@@ -85,6 +99,7 @@ void on_method_call(FlMethodChannel*, FlMethodCall* call, gpointer user_data) {
       }
       gtk_window_set_title(GTK_WINDOW(entry->window), type == "post" ? "Post detail" : "User detail");
       setup_window(context->app, entry->view, entry->window, type, id);
+      g_printerr("[window-debug] setup complete key=%s\n", key.c_str());
     }
     fl_method_call_respond_success(call, nullptr, nullptr);
     return;
@@ -94,6 +109,10 @@ void on_method_call(FlMethodChannel*, FlMethodCall* call, gpointer user_data) {
 
 void setup_window(MyApplication* self, FlView* view, GtkWidget* window,
                   const std::string& type, int64_t id) {
+  g_printerr("[window-debug] setup begin window=%s:%" G_GINT64_FORMAT " view=%p\n",
+             type.c_str(), static_cast<gint64>(id), static_cast<void*>(view));
+  // Connect before realizing the view, which installs Flutter's delete handler.
+  g_signal_connect(window, "delete-event", G_CALLBACK(close_window_cb), nullptr);
   FlEngine* engine = fl_view_get_engine(view);
   g_autoptr(FlStandardMethodCodec) codec = fl_standard_method_codec_new();
   FlMethodChannel* channel = fl_method_channel_new(
@@ -105,10 +124,13 @@ void setup_window(MyApplication* self, FlView* view, GtkWidget* window,
   gtk_widget_show(GTK_WIDGET(view));
   g_signal_connect(view, "first-frame", G_CALLBACK(first_frame_cb), nullptr);
   gtk_widget_realize(GTK_WIDGET(view));
+  g_printerr("[window-debug] view realized window=%s:%" G_GINT64_FORMAT "\n",
+             type.c_str(), static_cast<gint64>(id));
 }
 }  // namespace
 
 static void my_application_activate(GApplication* application) {
+  g_printerr("[window-debug] application activated\n");
   MyApplication* self = MY_APPLICATION(application);
   GtkWidget* window = gtk_application_window_new(GTK_APPLICATION(application));
   gtk_window_set_default_size(GTK_WINDOW(window), 1000, 720);
@@ -138,6 +160,7 @@ static gboolean my_application_local_command_line(GApplication* application,
 }
 
 static void my_application_dispose(GObject* object) {
+  g_printerr("[window-debug] application disposing\n");
   MyApplication* self = MY_APPLICATION(object);
   g_clear_pointer(&self->dart_entrypoint_arguments, g_strfreev);
   delete self->engine_manager;

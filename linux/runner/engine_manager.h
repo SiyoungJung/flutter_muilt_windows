@@ -30,12 +30,15 @@ class EngineManager {
   }
 
   EngineEntry* create(const std::string& id, GtkApplication* app) {
+    g_printerr("[window-debug] engine create begin key=%s\n", id.c_str());
     if (get(id) != nullptr) {
       return nullptr;
     }
 
     g_autoptr(FlDartProject) project = fl_dart_project_new();
     FlView* view = fl_view_new(project);
+    g_printerr("[window-debug] view created key=%s view=%p\n", id.c_str(),
+               static_cast<void*>(view));
     FlEngine* engine = fl_view_get_engine(view);
     GtkWidget* window = gtk_application_window_new(app);
 
@@ -62,6 +65,7 @@ class EngineManager {
 
  private:
   static void on_window_destroy(GtkWidget* window, gpointer user_data) {
+    g_printerr("[window-debug] window destroyed window=%p\n", static_cast<void*>(window));
     auto* self = static_cast<EngineManager*>(user_data);
     auto& entries = self->engines_;
     entries.erase(std::remove_if(entries.begin(), entries.end(),

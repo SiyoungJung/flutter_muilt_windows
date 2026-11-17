@@ -8,6 +8,7 @@
 
 #include "engine_manager.h"
 #include "flutter/generated_plugin_registrant.h"
+#include "utils.h"
 
 namespace {
 using flutter::EncodableMap;
@@ -25,19 +26,32 @@ FlutterWindow::FlutterWindow(const flutter::DartProject& project,
 FlutterWindow::~FlutterWindow() { Destroy(); }
 
 bool FlutterWindow::OnCreate() {
+  const std::string label = type_ + ":" + std::to_string(id_);
+  DebugLog("FlutterWindow::OnCreate begin " + label);
   if (!Win32Window::OnCreate()) return false;
   RECT frame = GetClientArea();
+  DebugLog("Creating FlutterViewController " + label + " size=" +
+           std::to_string(frame.right - frame.left) + "x" +
+           std::to_string(frame.bottom - frame.top));
   flutter_controller_ = std::make_unique<flutter::FlutterViewController>(
       frame.right - frame.left, frame.bottom - frame.top, project_);
-  if (!flutter_controller_->engine() || !flutter_controller_->view()) return false;
+  DebugLog("FlutterViewController constructor returned " + label);
+  if (!flutter_controller_->engine() || !flutter_controller_->view()) {
+    DebugLog("FlutterViewController engine or view is null " + label);
+    return false;
+  }
 
+  DebugLog("RegisterPlugins begin " + label);
   RegisterPlugins(flutter_controller_->engine());
+  DebugLog("RegisterPlugins end; creating channel " + label);
   channel_ = std::make_unique<flutter::MethodChannel<EncodableValue>>(
       flutter_controller_->engine()->messenger(), kChannelName,
       &flutter::StandardMethodCodec::GetInstance());
   channel_->SetMethodCallHandler(
       [this](const MethodCall<EncodableValue>& call,
              std::unique_ptr<MethodResult<EncodableValue>> result) {
+        DebugLog("Method call window=" + type_ + ":" + std::to_string(id_) +
+                 " method=" + call.method_name());
         if (call.method_name() == "getWindowInfo") {
           EncodableMap info;
           info[EncodableValue("type")] = EncodableValue(type_);
@@ -76,33 +90,49 @@ bool FlutterWindow::OnCreate() {
           return;
         }
         const std::string key = *type + ":" + std::to_string(id);
+        DebugLog("openWindow requested key=" + key);
         EngineEntry* entry = manager_->get(key);
         if (entry) {
+          DebugLog("openWindow activating existing key=" + key);
           HWND window = entry->window->GetHandle();
           if (IsIconic(window)) ShowWindow(window, SW_RESTORE);
           SetForegroundWindow(window);
         } else if (!manager_->create(key, *type, id)) {
+          DebugLog("openWindow creation failed key=" + key);
           result->Error("window_failed", "Could not create window");
           return;
         }
+        DebugLog("openWindow returning success key=" + key);
         result->Success();
       });
 
+  DebugLog("SetChildContent begin " + label);
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
   initialized_ = true;
-  flutter_controller_->engine()->SetNextFrameCallback([this]() { Show(); });
+  DebugLog("SetChildContent end; scheduling first frame " + label);
+  flutter_controller_->engine()->SetNextFrameCallback([this]() {
+    DebugLog("First frame callback " + type_ + ":" + std::to_string(id_));
+    Show();
+  });
+  DebugLog("ForceRedraw begin " + label);
   flutter_controller_->ForceRedraw();
+  DebugLog("FlutterWindow::OnCreate end " + label);
   return true;
 }
 
 void FlutterWindow::OnDestroy() {
+  DebugLog("FlutterWindow::OnDestroy begin " + type_ + ":" + std::to_string(id_) +
+           " initialized=" + std::to_string(initialized_));
   channel_.reset();
+  DebugLog("FlutterWindow::OnDestroy channel reset " + type_ + ":" + std::to_string(id_));
   flutter_controller_.reset();
+  DebugLog("FlutterWindow::OnDestroy controller reset " + type_ + ":" + std::to_string(id_));
   if (initialized_) {
     initialized_ = false;
     manager_->on_window_closed(this);
   }
   Win32Window::OnDestroy();
+  DebugLog("FlutterWindow::OnDestroy end " + type_ + ":" + std::to_string(id_));
 }
 
 LRESULT FlutterWindow::MessageHandler(HWND hwnd, UINT const message,

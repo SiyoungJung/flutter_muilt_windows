@@ -8,6 +8,8 @@
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
+  InstallCrashLogger();
+  DebugLog("Application starting");
   // Attach to console when present (e.g., 'flutter run') or create a
   // new console when running with a debugger.
   if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {
@@ -16,7 +18,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   // Initialize COM, so that it is available for use in the library and/or
   // plugins.
-  ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  const HRESULT com_result = ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+  DebugLog("CoInitializeEx result=" + std::to_string(com_result));
 
   flutter::DartProject project(L"data");
 
@@ -30,8 +33,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   Win32Window::Point origin(10, 10);
   Win32Window::Size size(1280, 720);
   if (!window.Create(L"multi_windows_poc", origin, size)) {
+    DebugLog("Main window creation failed");
     return EXIT_FAILURE;
   }
+  DebugLog("Main window created");
   manager.set_main_window(&window);
 
   ::MSG msg;
@@ -40,7 +45,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     ::DispatchMessage(&msg);
   }
 
+  DebugLog("Message loop exited; shutting down");
   manager.shutdown();
   ::CoUninitialize();
+  DebugLog("Application exiting normally");
   return EXIT_SUCCESS;
 }

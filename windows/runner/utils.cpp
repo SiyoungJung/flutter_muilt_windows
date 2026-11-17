@@ -7,6 +7,56 @@
 
 #include <iostream>
 
+namespace {
+LONG WINAPI LogUnhandledException(EXCEPTION_POINTERS* exception) {
+  char message[256];
+  if (exception && exception->ExceptionRecord) {
+    const auto* record = exception->ExceptionRecord;
+    snprintf(message, sizeof(message), "Unhandled exception: code=0x%08lX address=%p flags=0x%08lX",
+             static_cast<unsigned long>(record->ExceptionCode),
+             record->ExceptionAddress,
+             static_cast<unsigned long>(record->ExceptionFlags));
+    DebugLog(message);
+  } else {
+    DebugLog("Unhandled exception: no exception record");
+  }
+  return EXCEPTION_CONTINUE_SEARCH;
+}
+}  // namespace
+
+void DebugLog(const std::string& message) {
+  SYSTEMTIME now;
+  GetLocalTime(&now);
+  char prefix[128];
+  snprintf(prefix, sizeof(prefix),
+           "%04u-%02u-%02u %02u:%02u:%02u.%03u pid=%lu tid=%lu ",
+           static_cast<unsigned>(now.wYear), static_cast<unsigned>(now.wMonth),
+           static_cast<unsigned>(now.wDay), static_cast<unsigned>(now.wHour),
+           static_cast<unsigned>(now.wMinute), static_cast<unsigned>(now.wSecond),
+           static_cast<unsigned>(now.wMilliseconds),
+           static_cast<unsigned long>(GetCurrentProcessId()),
+           static_cast<unsigned long>(GetCurrentThreadId()));
+  const std::string line = std::string(prefix) + message + "\r\n";
+  OutputDebugStringA(line.c_str());
+  wchar_t temp_path[MAX_PATH];
+  const DWORD length = GetTempPathW(MAX_PATH, temp_path);
+  if (length == 0 || length >= MAX_PATH) return;
+  const std::wstring path = std::wstring(temp_path) + L"multi_windows_poc_debug.log";
+  HANDLE file = CreateFileW(path.c_str(), FILE_APPEND_DATA,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr,
+                            OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (file == INVALID_HANDLE_VALUE) return;
+  DWORD written = 0;
+  WriteFile(file, line.data(), static_cast<DWORD>(line.size()), &written, nullptr);
+  FlushFileBuffers(file);
+  CloseHandle(file);
+}
+
+void InstallCrashLogger() {
+  SetUnhandledExceptionFilter(LogUnhandledException);
+  DebugLog("Crash logger installed; log path: %TEMP%\\multi_windows_poc_debug.log");
+}
+
 void CreateAndAttachConsole() {
   if (::AllocConsole()) {
     FILE *unused;
