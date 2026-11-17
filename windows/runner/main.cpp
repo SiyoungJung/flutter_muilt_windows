@@ -22,6 +22,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   DebugLog("CoInitializeEx result=" + std::to_string(com_result));
 
   flutter::DartProject project(L"data");
+  project.set_impeller_switch(flutter::ImpellerSwitch::Disabled);
 
   std::vector<std::string> command_line_arguments =
       GetCommandLineArguments();
