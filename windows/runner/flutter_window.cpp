@@ -59,8 +59,11 @@ bool FlutterWindow::OnCreate() {
         const auto* type = type_it == args->end() ? nullptr : std::get_if<std::string>(&type_it->second);
         int64_t id = 0;
         if (id_it != args->end()) {
-          if (const auto* value = std::get_if<int32_t>(&id_it->second)) id = *value;
-          else if (const auto* value = std::get_if<int64_t>(&id_it->second)) id = *value;
+          if (const auto* value32 = std::get_if<int32_t>(&id_it->second)) {
+            id = *value32;
+          } else if (const auto* value64 = std::get_if<int64_t>(&id_it->second)) {
+            id = *value64;
+          }
         }
         if (!type || id <= 0) {
           result->Error("invalid_arguments", "Expected a window type and positive ID");
