@@ -1,0 +1,78 @@
+--- a/flutter/shell/platform/linux/public/flutter_linux/fl_dart_project.h
++++ b/flutter/shell/platform/linux/public/flutter_linux/fl_dart_project.h
+@@ -103,6 +103,25 @@
+  * "/projects/my_dart_project/data/icudtl.dat".
+  */
+ const gchar* fl_dart_project_get_icu_data_path(FlDartProject* project);
++
++/**
++ * fl_dart_project_set_dart_entrypoint:
++ * @project: an #FlDartProject.
++ * @entrypoint: (nullable): Dart entrypoint name, or NULL for main.
++ *
++ * Sets the Dart function to run when this project starts. Non-main
++ * entrypoints must be preserved with @pragma('vm:entry-point').
++ */
++void fl_dart_project_set_dart_entrypoint(FlDartProject* project,
++                                         const gchar* entrypoint);
++
++/**
++ * fl_dart_project_get_dart_entrypoint:
++ * @project: an #FlDartProject.
++ *
++ * Returns: (nullable): the entrypoint name, owned by the project.
++ */
++const gchar* fl_dart_project_get_dart_entrypoint(FlDartProject* project);
+ 
+ /**
+  * fl_dart_project_set_dart_entrypoint_arguments:
+--- a/flutter/shell/platform/linux/fl_dart_project.cc
++++ b/flutter/shell/platform/linux/fl_dart_project.cc
+@@ -12,6 +12,7 @@
+   gchar* aot_library_path;
+   gchar* assets_path;
+   gchar* icu_data_path;
++  gchar* dart_entrypoint;
+   gchar** dart_entrypoint_args;
+ 
+   FlUIThreadPolicy ui_thread_policy;
+@@ -40,6 +41,7 @@
+   g_clear_pointer(&self->aot_library_path, g_free);
+   g_clear_pointer(&self->assets_path, g_free);
+   g_clear_pointer(&self->icu_data_path, g_free);
++  g_clear_pointer(&self->dart_entrypoint, g_free);
+   g_clear_pointer(&self->dart_entrypoint_args, g_strfreev);
+ 
+   G_OBJECT_CLASS(fl_dart_project_parent_class)->dispose(object);
+@@ -106,6 +108,20 @@
+   return self->icu_data_path;
+ }
+ 
++G_MODULE_EXPORT void fl_dart_project_set_dart_entrypoint(
++    FlDartProject* self, const gchar* entrypoint) {
++  g_return_if_fail(FL_IS_DART_PROJECT(self));
++  gchar* copy = g_strdup(entrypoint);
++  g_free(self->dart_entrypoint);
++  self->dart_entrypoint = copy;
++}
++
++G_MODULE_EXPORT const gchar* fl_dart_project_get_dart_entrypoint(
++    FlDartProject* self) {
++  g_return_val_if_fail(FL_IS_DART_PROJECT(self), nullptr);
++  return self->dart_entrypoint;
++}
++
+ G_MODULE_EXPORT gchar** fl_dart_project_get_dart_entrypoint_arguments(
+     FlDartProject* self) {
+   g_return_val_if_fail(FL_IS_DART_PROJECT(self), nullptr);
+--- a/flutter/shell/platform/linux/fl_engine.cc
++++ b/flutter/shell/platform/linux/fl_engine.cc
+@@ -875,6 +875,8 @@
+   args.custom_task_runners = &custom_task_runners;
+   args.shutdown_dart_vm_when_done = true;
+   args.on_pre_engine_restart_callback = fl_engine_on_pre_engine_restart_cb;
++  args.custom_dart_entrypoint =
++      fl_dart_project_get_dart_entrypoint(self->project);
+   args.dart_entrypoint_argc =
+       dart_entrypoint_args != nullptr ? g_strv_length(dart_entrypoint_args) : 0;
+   args.dart_entrypoint_argv =
